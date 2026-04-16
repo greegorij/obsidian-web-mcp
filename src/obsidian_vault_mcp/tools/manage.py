@@ -1,8 +1,9 @@
 """Management tools for the Obsidian vault MCP server."""
 
-import json
+from . import json_utils as json
 import logging
 
+from ..git_ops import commit_vault_change
 from ..vault import list_directory, move_path, delete_path, resolve_vault_path
 
 logger = logging.getLogger(__name__)
@@ -38,6 +39,11 @@ def vault_move(source: str, destination: str, create_dirs: bool = True) -> str:
     """Move a file or directory within the vault."""
     try:
         moved = move_path(source, destination, create_dirs=create_dirs)
+
+        # PDCA-014 auto-commit: stage both source (delete) and destination (add)
+        if moved:
+            commit_vault_change([source, destination], "move")
+
         return json.dumps({"source": source, "destination": destination, "moved": moved})
     except ValueError as e:
         return json.dumps({"error": str(e), "source": source, "destination": destination})
@@ -56,6 +62,11 @@ def vault_delete(path: str, confirm: bool = False) -> str:
 
     try:
         deleted = delete_path(path)
+
+        # PDCA-014 auto-commit: stage the removal (destination is .trash/ which is gitignored)
+        if deleted:
+            commit_vault_change([path], "delete")
+
         return json.dumps({"path": path, "deleted": deleted})
     except ValueError as e:
         return json.dumps({"error": str(e), "path": path})

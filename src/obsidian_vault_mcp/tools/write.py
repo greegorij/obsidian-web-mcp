@@ -1,10 +1,11 @@
 """Write tools for the Obsidian vault MCP server."""
 
-import json
+from . import json_utils as json
 import logging
 
 import frontmatter
 
+from ..git_ops import commit_vault_change
 from ..vault import resolve_vault_path, read_file, write_file_atomic
 
 logger = logging.getLogger(__name__)
@@ -33,6 +34,9 @@ def vault_write(path: str, content: str, create_dirs: bool = True, merge_frontma
 
         is_new, size = write_file_atomic(path, content, create_dirs=create_dirs)
 
+        # PDCA-014 auto-commit: keep git tracking consistent for MCP writes
+        commit_vault_change([path], "write")
+
         return json.dumps({"path": path, "created": is_new, "size": size})
     except ValueError as e:
         return json.dumps({"error": str(e), "path": path})
@@ -44,6 +48,7 @@ def vault_write(path: str, content: str, create_dirs: bool = True, merge_frontma
 def vault_batch_frontmatter_update(updates: list[dict]) -> str:
     """Update frontmatter fields on multiple files without changing body content."""
     results = []
+    updated_paths = []
 
     for update in updates:
         file_path = update.get("path", "")
@@ -60,11 +65,16 @@ def vault_batch_frontmatter_update(updates: list[dict]) -> str:
             write_file_atomic(file_path, new_content, create_dirs=False)
 
             results.append({"path": file_path, "updated": True})
+            updated_paths.append(file_path)
         except FileNotFoundError:
             results.append({"path": file_path, "updated": False, "error": "File not found"})
         except ValueError as e:
             results.append({"path": file_path, "updated": False, "error": str(e)})
         except Exception as e:
             results.append({"path": file_path, "updated": False, "error": str(e)})
+
+    # PDCA-014 auto-commit: single commit for the whole batch
+    if updated_paths:
+        commit_vault_change(updated_paths, "batch_frontmatter")
 
     return json.dumps({"results": results})
