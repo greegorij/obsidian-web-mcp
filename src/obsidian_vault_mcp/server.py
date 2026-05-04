@@ -17,19 +17,29 @@ from .frontmatter_index import FrontmatterIndex
 
 logger = logging.getLogger(__name__)
 
-# Global frontmatter index instance
+# Global frontmatter index — initialized once at import, not per-request.
+# With stateless_http=True, lifespan runs per session. Building the index
+# there caused 17s cold starts on every MCP request. Now the index lives
+# at module level: built once, watched by watchdog, shared across sessions.
 frontmatter_index = FrontmatterIndex()
+_index_started = False
+
+
+def _ensure_index():
+    """Start the index exactly once (thread-safe via GIL)."""
+    global _index_started
+    if not _index_started:
+        logger.info(f"Starting vault MCP server. Vault: {VAULT_PATH}")
+        frontmatter_index.start()
+        logger.info(f"Frontmatter index built: {frontmatter_index.file_count} files indexed")
+        _index_started = True
 
 
 @asynccontextmanager
 async def lifespan(server):
-    """Start frontmatter index on server startup, stop on shutdown."""
-    logger.info(f"Starting vault MCP server. Vault: {VAULT_PATH}")
-    frontmatter_index.start()
-    logger.info(f"Frontmatter index built: {frontmatter_index.file_count} files indexed")
+    """Ensure index is ready; yield it to the session."""
+    _ensure_index()
     yield {"frontmatter_index": frontmatter_index}
-    frontmatter_index.stop()
-    logger.info("Vault MCP server shut down.")
 
 
 # Create the MCP server
@@ -45,7 +55,8 @@ mcp = FastMCP(
             "localhost:*",
             "[::1]:*",
             # Add your tunnel hostname here, e.g.:
-            # "vault-mcp.example.com",
+            "vps-2557.tail301a28.ts.net",
+            "vault.grzegorzgolas.com",
         ],
     ),
 )
@@ -185,6 +196,70 @@ def vault_delete(path: str, confirm: bool = False) -> str:
     """Delete a file (move to .trash/)."""
     inp = VaultDeleteInput(path=path, confirm=confirm)
     return _vault_delete(inp.path, inp.confirm)
+
+
+# --- RAG search tool (proxied to jarvis-rag on localhost:8765) ---
+
+import os
+import httpx
+
+_RAG_URL = os.environ.get("RAG_INTERNAL_URL", "http://127.0.0.1:8765")
+_RAG_TOKEN = os.environ.get("RAG_TOKEN", "")
+
+
+@mcp.tool(
+    name="rag_search",
+    description="Search across all indexed documents (Obsidian vault, Google Drive files, meeting transcripts). "
+    "Returns the most relevant chunks with source info. "
+    "Use for questions like 'where is the SLK contract?', 'what did we decide about pricing?', "
+    "'find Borycka contact details'. Query in Polish or English.",
+    annotations={"readOnlyHint": True, "destructiveHint": False, "idempotentHint": True, "openWorldHint": False},
+)
+def rag_search(query: str, n_results: int = 5, source_type: str | None = None) -> str:
+    """Search RAG index via internal HTTP call to jarvis-rag."""
+    try:
+        with httpx.Client(timeout=30) as client:
+            resp = client.post(
+                f"{_RAG_URL}/mcp",
+                headers={
+                    "Authorization": f"Bearer {_RAG_TOKEN}",
+                    "Content-Type": "application/json",
+                    "Accept": "application/json, text/event-stream",
+                },
+                json={
+                    "jsonrpc": "2.0",
+                    "method": "tools/call",
+                    "params": {
+                        "name": "rag_search",
+                        "arguments": {
+                            "query": query,
+                            "n_results": n_results,
+                            **({"source_type": source_type} if source_type else {}),
+                        },
+                    },
+                    "id": 1,
+                },
+            )
+
+            if resp.status_code != 200:
+                return f"RAG search error: HTTP {resp.status_code}"
+
+            # Parse SSE response (FastMCP returns event stream)
+            text = resp.text
+            for line in text.split("\n"):
+                if line.startswith("data: "):
+                    import json as _json
+                    data = _json.loads(line[6:])
+                    if "result" in data:
+                        content = data["result"].get("content", [])
+                        if content:
+                            return content[0].get("text", "No results")
+                    if "error" in data:
+                        return f"RAG error: {data['error'].get('message', 'unknown')}"
+
+            return "RAG search: no response parsed"
+    except Exception as e:
+        return f"RAG search failed: {e}"
 
 
 def main():

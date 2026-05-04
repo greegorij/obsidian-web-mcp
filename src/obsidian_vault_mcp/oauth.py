@@ -17,6 +17,7 @@ import hashlib
 import hmac
 import logging
 import secrets
+import os
 import time
 from urllib.parse import urlencode, urlparse, parse_qs
 
@@ -42,7 +43,7 @@ def _cleanup_codes():
 
 async def oauth_metadata(request: Request) -> JSONResponse:
     """RFC 8414 OAuth authorization server metadata."""
-    base_url = str(request.base_url).rstrip("/")
+    base_url = os.environ.get("PUBLIC_BASE_URL", str(request.base_url).rstrip("/")).rstrip("/")
     return JSONResponse({
         "issuer": base_url,
         "authorization_endpoint": f"{base_url}/oauth/authorize",
@@ -207,9 +208,20 @@ async def oauth_register(request: Request) -> JSONResponse:
 
 
 # Starlette routes to mount on the app
+
+async def oauth_protected_resource(request: Request) -> JSONResponse:
+    """RFC 9728 OAuth 2.0 Protected Resource Metadata."""
+    base_url = os.environ.get("PUBLIC_BASE_URL", str(request.base_url).rstrip("/")).rstrip("/")
+    return JSONResponse({
+        "resource": base_url,
+        "authorization_servers": [base_url],
+    })
+
 oauth_routes = [
     Route("/.well-known/oauth-authorization-server", oauth_metadata, methods=["GET"]),
     Route("/oauth/authorize", oauth_authorize, methods=["GET"]),
     Route("/oauth/token", oauth_token, methods=["POST"]),
     Route("/oauth/register", oauth_register, methods=["POST"]),
+    Route("/.well-known/oauth-protected-resource", oauth_protected_resource, methods=["GET"]),
+    Route("/.well-known/oauth-protected-resource/mcp", oauth_protected_resource, methods=["GET"]),
 ]

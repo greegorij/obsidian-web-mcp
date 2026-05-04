@@ -1,6 +1,6 @@
 """Read tools for the Obsidian vault MCP server."""
 
-import json
+from . import json_utils as json
 import logging
 
 import frontmatter
