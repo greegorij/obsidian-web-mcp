@@ -1,6 +1,7 @@
 """Bearer token authentication middleware for the vault MCP server."""
 
-import os
+import hmac
+
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import JSONResponse
@@ -16,19 +17,7 @@ _AUTH_EXEMPT_PATHS = {
     "/oauth/authorize",
     "/oauth/token",
     "/oauth/register",
-    "/.well-known/openid-configuration",
 }
-
-
-def _www_authenticate_header(request: Request) -> dict[str, str]:
-    """Per MCP spec 2025-03-26: 401 MUST include WWW-Authenticate pointing to PRM."""
-    base = os.environ.get("PUBLIC_BASE_URL", str(request.base_url).rstrip("/")).rstrip("/")
-    return {
-        "WWW-Authenticate": (
-            f'Bearer realm="vault-mcp", '
-            f'resource_metadata="{base}/.well-known/oauth-protected-resource"'
-        )
-    }
 
 
 class BearerAuthMiddleware(BaseHTTPMiddleware):
@@ -49,15 +38,15 @@ class BearerAuthMiddleware(BaseHTTPMiddleware):
             return JSONResponse(
                 {"error": "Missing or malformed Authorization header"},
                 status_code=401,
-                headers=_www_authenticate_header(request),
             )
 
+        # Constant-time comparison — the gate guards every MCP request, a plain
+        # ==/!= is a timing side-channel on the static token (audyt s1099, W20).
         token = auth_header[7:]
-        if token != VAULT_MCP_TOKEN:
+        if not hmac.compare_digest(token.encode("utf-8"), VAULT_MCP_TOKEN.encode("utf-8")):
             return JSONResponse(
                 {"error": "Invalid token"},
                 status_code=401,
-                headers=_www_authenticate_header(request),
             )
 
         return await call_next(request)

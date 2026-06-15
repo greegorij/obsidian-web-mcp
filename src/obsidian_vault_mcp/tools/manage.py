@@ -1,10 +1,10 @@
 """Management tools for the Obsidian vault MCP server."""
 
-from . import json_utils as json
 import logging
 
 from ..git_ops import commit_vault_change
-from ..vault import list_directory, move_path, delete_path, resolve_vault_path
+from ..vault import delete_path, list_directory, move_path
+from . import json_utils as json
 
 logger = logging.getLogger(__name__)
 
@@ -39,11 +39,7 @@ def vault_move(source: str, destination: str, create_dirs: bool = True) -> str:
     """Move a file or directory within the vault."""
     try:
         moved = move_path(source, destination, create_dirs=create_dirs)
-
-        # PDCA-014 auto-commit: stage both source (delete) and destination (add)
-        if moved:
-            commit_vault_change([source, destination], "move")
-
+        commit_vault_change([source, destination], "move")
         return json.dumps({"source": source, "destination": destination, "moved": moved})
     except ValueError as e:
         return json.dumps({"error": str(e), "source": source, "destination": destination})
@@ -55,18 +51,16 @@ def vault_move(source: str, destination: str, create_dirs: bool = True) -> str:
 def vault_delete(path: str, confirm: bool = False) -> str:
     """Delete a file by moving it to .trash/ in the vault."""
     if not confirm:
-        return json.dumps({
-            "error": "Set confirm=true to execute deletion. Files are moved to .trash/, not hard deleted.",
-            "path": path,
-        })
+        return json.dumps(
+            {
+                "error": "Set confirm=true to execute deletion. Files are moved to .trash/, not hard deleted.",
+                "path": path,
+            }
+        )
 
     try:
         deleted = delete_path(path)
-
-        # PDCA-014 auto-commit: stage the removal (destination is .trash/ which is gitignored)
-        if deleted:
-            commit_vault_change([path], "delete")
-
+        commit_vault_change([path], "delete")
         return json.dumps({"path": path, "deleted": deleted})
     except ValueError as e:
         return json.dumps({"error": str(e), "path": path})

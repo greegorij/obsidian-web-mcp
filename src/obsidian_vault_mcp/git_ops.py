@@ -15,12 +15,13 @@ responses are never blocked by a commit failure. Worst case: a write succeeds
 but commit fails → untracked file → manual cleanup needed (same as before the
 patch, but now we at least log it).
 """
+
 from __future__ import annotations
 
 import logging
 import subprocess
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Iterable
 
 from . import config
 
@@ -67,24 +68,18 @@ def commit_vault_change(
     vault_path = Path(config.VAULT_PATH).resolve()
     path_list = [p for p in paths if p]
     if not path_list:
-        logger.warning(
-            f"commit_vault_change called with no paths (operation={operation})"
-        )
+        logger.warning(f"commit_vault_change called with no paths (operation={operation})")
         return True
 
     # git add --all handles new files, modifications, and deletions uniformly
-    add_code, _, add_err = _run_git(
-        ["add", "--all", "--"] + path_list, vault_path
-    )
+    add_code, _, add_err = _run_git(["add", "--all", "--"] + path_list, vault_path)
     if add_code != 0:
         logger.error(f"git add failed for {path_list}: {add_err}")
         return False
 
     # Check if there's anything to commit
     # exit 0 = no staged changes, exit 1 = has staged changes, other = error
-    diff_code, _, _ = _run_git(
-        ["diff", "--cached", "--quiet"], vault_path
-    )
+    diff_code, _, _ = _run_git(["diff", "--cached", "--quiet"], vault_path)
     if diff_code == 0:
         logger.debug(f"no changes to commit for {path_list} ({operation})")
         return True
@@ -99,9 +94,7 @@ def commit_vault_change(
     if extra_msg:
         message += f"\n\n{extra_msg}"
 
-    commit_code, commit_out, commit_err = _run_git(
-        ["commit", "-m", message], vault_path
-    )
+    commit_code, commit_out, commit_err = _run_git(["commit", "-m", message], vault_path)
     if commit_code != 0:
         # Defensive: catch "nothing to commit" even though check above covers it
         combined = (commit_err + commit_out).lower()

@@ -1,7 +1,7 @@
 """Custom JSON encoder for vault data — handles datetime.date from YAML frontmatter."""
 
-import json
 import datetime
+import json
 
 
 class VaultEncoder(json.JSONEncoder):

@@ -39,9 +39,7 @@ class FrontmatterIndex:
                 count += 1
 
         elapsed = time.monotonic() - t0
-        logger.info(
-            "Frontmatter index built: %d files in %.2f seconds", count, elapsed
-        )
+        logger.info("Frontmatter index built: %d files in %.2f seconds", count, elapsed)
 
         self._observer = Observer()
         handler = _VaultEventHandler(self)
@@ -118,9 +116,7 @@ class FrontmatterIndex:
             self._pending_paths.add(abs_path)
             if self._debounce_timer is not None:
                 self._debounce_timer.cancel()
-            self._debounce_timer = threading.Timer(
-                config.FRONTMATTER_INDEX_DEBOUNCE, self._flush_pending
-            )
+            self._debounce_timer = threading.Timer(config.FRONTMATTER_INDEX_DEBOUNCE, self._flush_pending)
             self._debounce_timer.start()
 
     def _flush_pending(self) -> None:

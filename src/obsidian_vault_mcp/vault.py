@@ -4,7 +4,7 @@ import fnmatch
 import os
 import shutil
 import tempfile
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from . import config
@@ -38,7 +38,7 @@ def resolve_vault_path(relative_path: str) -> Path:
 
 def _iso_timestamp(ts: float) -> str:
     """Convert a Unix timestamp to an ISO 8601 string in UTC."""
-    return datetime.fromtimestamp(ts, tz=timezone.utc).isoformat()
+    return datetime.fromtimestamp(ts, tz=UTC).isoformat()
 
 
 def read_file(relative_path: str) -> tuple[str, dict]:
@@ -63,9 +63,7 @@ def read_file(relative_path: str) -> tuple[str, dict]:
     return content, metadata
 
 
-def write_file_atomic(
-    relative_path: str, content: str, create_dirs: bool = True
-) -> tuple[bool, int]:
+def write_file_atomic(relative_path: str, content: str, create_dirs: bool = True) -> tuple[bool, int]:
     """Write content to a file atomically.
 
     Returns (is_new_file, bytes_written). Writes to a tempfile in the same
@@ -73,9 +71,7 @@ def write_file_atomic(
     """
     encoded = content.encode("utf-8")
     if len(encoded) > config.MAX_CONTENT_SIZE:
-        raise ValueError(
-            f"Content size {len(encoded)} bytes exceeds limit of {config.MAX_CONTENT_SIZE} bytes"
-        )
+        raise ValueError(f"Content size {len(encoded)} bytes exceeds limit of {config.MAX_CONTENT_SIZE} bytes")
 
     path = resolve_vault_path(relative_path)
     is_new = not path.exists()
@@ -100,9 +96,7 @@ def write_file_atomic(
     return is_new, len(encoded)
 
 
-def move_path(
-    source: str, destination: str, create_dirs: bool = True
-) -> bool:
+def move_path(source: str, destination: str, create_dirs: bool = True) -> bool:
     """Move a file or directory from source to destination.
 
     Both paths are relative to the vault root. Raises if the destination
@@ -144,7 +138,7 @@ def delete_path(relative_path: str) -> bool:
 
     # Avoid collisions in .trash by appending a timestamp
     if dest.exists():
-        ts = datetime.now(tz=timezone.utc).strftime("%Y%m%d%H%M%S")
+        ts = datetime.now(tz=UTC).strftime("%Y%m%d%H%M%S")
         dest = trash_dir / f"{path.stem}_{ts}{path.suffix}"
 
     shutil.move(str(path), str(dest))
@@ -209,13 +203,15 @@ def list_directory(
 
             rel = str(entry.relative_to(vault_root))
 
-            results.append({
-                "name": entry.name,
-                "path": rel,
-                "type": "dir" if is_dir else "file",
-                "size": stat.st_size,
-                "modified": _iso_timestamp(stat.st_mtime),
-            })
+            results.append(
+                {
+                    "name": entry.name,
+                    "path": rel,
+                    "type": "dir" if is_dir else "file",
+                    "size": stat.st_size,
+                    "modified": _iso_timestamp(stat.st_mtime),
+                }
+            )
 
             if is_dir:
                 _walk(entry, current_depth + 1)

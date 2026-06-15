@@ -1,12 +1,12 @@
 """Write tools for the Obsidian vault MCP server."""
 
-from . import json_utils as json
 import logging
 
 import frontmatter
 
 from ..git_ops import commit_vault_change
-from ..vault import resolve_vault_path, read_file, write_file_atomic
+from ..vault import read_file, resolve_vault_path, write_file_atomic
+from . import json_utils as json
 
 logger = logging.getLogger(__name__)
 
@@ -34,7 +34,7 @@ def vault_write(path: str, content: str, create_dirs: bool = True, merge_frontma
 
         is_new, size = write_file_atomic(path, content, create_dirs=create_dirs)
 
-        # PDCA-014 auto-commit: keep git tracking consistent for MCP writes
+        # PDCA-014 auto-commit: utrzymuje tracking git dla zapisów MCP (łatka git_ops)
         commit_vault_change([path], "write")
 
         return json.dumps({"path": path, "created": is_new, "size": size})
@@ -73,7 +73,7 @@ def vault_batch_frontmatter_update(updates: list[dict]) -> str:
         except Exception as e:
             results.append({"path": file_path, "updated": False, "error": str(e)})
 
-    # PDCA-014 auto-commit: single commit for the whole batch
+    # PDCA-014 auto-commit zaktualizowanych plików (łatka git_ops)
     if updated_paths:
         commit_vault_change(updated_paths, "batch_frontmatter")
 

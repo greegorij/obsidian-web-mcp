@@ -1,11 +1,11 @@
 """Read tools for the Obsidian vault MCP server."""
 
-from . import json_utils as json
 import logging
 
 import frontmatter
 
-from ..vault import resolve_vault_path, read_file
+from ..vault import read_file
+from . import json_utils as json
 
 logger = logging.getLogger(__name__)
 
@@ -13,7 +13,6 @@ logger = logging.getLogger(__name__)
 def vault_read(path: str) -> str:
     """Read a file from the vault, returning content, metadata, and parsed frontmatter."""
     try:
-        resolved = resolve_vault_path(path)
         content, metadata = read_file(path)
 
         fm_data = None
@@ -24,19 +23,23 @@ def vault_read(path: str) -> str:
         except Exception:
             pass
 
-        return json.dumps({
-            "path": path,
-            "content": content,
-            "metadata": metadata,
-            "frontmatter": fm_data,
-        })
-    except ValueError as e:
-        return json.dumps({"error": str(e), "path": path})
+        return json.dumps(
+            {
+                "path": path,
+                "content": content,
+                "metadata": metadata,
+                "frontmatter": fm_data,
+            }
+        )
+    except ValueError:
+        # Komunikat generyczny do klienta (audyt s1099, S78) — pełny w logach serwisu.
+        logger.exception(f"vault_read invalid content: {path}")
+        return json.dumps({"error": "Invalid file content", "path": path})
     except FileNotFoundError:
-        return json.dumps({"error": f"File not found: {path}", "path": path})
-    except Exception as e:
-        logger.error(f"vault_read error for {path}: {e}")
-        return json.dumps({"error": str(e), "path": path})
+        return json.dumps({"error": "File not found", "path": path})
+    except Exception:
+        logger.exception(f"vault_read unexpected error: {path}")
+        return json.dumps({"error": "Internal error reading file", "path": path})
 
 
 def vault_batch_read(paths: list[str], include_content: bool = True) -> str:
@@ -67,11 +70,13 @@ def vault_batch_read(paths: list[str], include_content: bool = True) -> str:
 
             results.append(entry)
             found += 1
-        except (ValueError, FileNotFoundError) as e:
-            results.append({"path": path, "error": str(e)})
+        except (ValueError, FileNotFoundError):
+            # Generyczny komunikat do klienta (audyt s1099, S78).
+            results.append({"path": path, "error": "Not found or invalid"})
             missing += 1
-        except Exception as e:
-            results.append({"path": path, "error": str(e)})
+        except Exception:
+            logger.exception(f"vault_batch_read unexpected error: {path}")
+            results.append({"path": path, "error": "Internal error reading file"})
             missing += 1
 
     return json.dumps({"files": results, "found": found, "missing": missing})

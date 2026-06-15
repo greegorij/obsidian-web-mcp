@@ -1,6 +1,5 @@
 """Search tools for the Obsidian vault MCP server."""
 
-from . import json_utils as json
 import logging
 import shutil
 import subprocess
@@ -10,6 +9,7 @@ import frontmatter
 
 from .. import config
 from ..vault import resolve_vault_path
+from . import json_utils as json
 
 logger = logging.getLogger(__name__)
 
@@ -42,7 +42,6 @@ def _search_ripgrep(
         return []
 
     matches = []
-    current_match = None
 
     for line in result.stdout.splitlines():
         try:
@@ -61,11 +60,13 @@ def _search_ripgrep(
             line_number = match_data["line_number"]
             line_text = match_data["lines"]["text"].rstrip("\n")
 
-            matches.append({
-                "path": rel_path,
-                "line_number": line_number,
-                "match_context": line_text,
-            })
+            matches.append(
+                {
+                    "path": rel_path,
+                    "line_number": line_number,
+                    "match_context": line_text,
+                }
+            )
 
             if len(matches) >= max_results:
                 break
@@ -113,11 +114,13 @@ def _search_python(
                 except ValueError:
                     continue
 
-                matches.append({
-                    "path": rel_path,
-                    "line_number": i + 1,
-                    "match_context": context,
-                })
+                matches.append(
+                    {
+                        "path": rel_path,
+                        "line_number": i + 1,
+                        "match_context": context,
+                    }
+                )
 
                 if len(matches) >= max_results:
                     return matches
@@ -166,11 +169,13 @@ def vault_search(
 
         truncated = len(matches) >= max_results
 
-        return json.dumps({
-            "results": matches,
-            "total_matches": len(matches),
-            "truncated": truncated,
-        })
+        return json.dumps(
+            {
+                "results": matches,
+                "total_matches": len(matches),
+                "truncated": truncated,
+            }
+        )
     except ValueError as e:
         return json.dumps({"error": str(e)})
     except Exception as e:
@@ -201,19 +206,23 @@ def vault_search_frontmatter(
             path = item["path"]
             fm = item["frontmatter"]
             title = fm.get("title", Path(path).stem)
-            formatted.append({
-                "path": path,
-                "frontmatter": fm,
-                "title": title,
-            })
+            formatted.append(
+                {
+                    "path": path,
+                    "frontmatter": fm,
+                    "title": title,
+                }
+            )
 
         truncated = len(results) > max_results
 
-        return json.dumps({
-            "results": formatted,
-            "total": len(formatted),
-            "truncated": truncated,
-        })
+        return json.dumps(
+            {
+                "results": formatted,
+                "total": len(formatted),
+                "truncated": truncated,
+            }
+        )
     except Exception as e:
         logger.error(f"vault_search_frontmatter error: {e}")
         return json.dumps({"error": str(e)})

@@ -4,16 +4,48 @@ Exposes read/write access to an Obsidian vault over Streamable HTTP.
 Designed to run behind Cloudflare Tunnel for secure remote access.
 """
 
-import json
+import json as _json
 import logging
+import os
 import sys
 from contextlib import asynccontextmanager
 
+import httpx
+import uvicorn
 from mcp.server.fastmcp import FastMCP
 from mcp.server.transport_security import TransportSecuritySettings
+from starlette.datastructures import MutableHeaders
 
-from .config import VAULT_MCP_PORT, VAULT_MCP_TOKEN, VAULT_PATH
+from .auth import BearerAuthMiddleware
+from .config import (
+    VAULT_MCP_ALLOWED_HOSTS,
+    VAULT_MCP_HOST,
+    VAULT_MCP_PORT,
+    VAULT_MCP_TOKEN,
+    VAULT_PATH,
+)
 from .frontmatter_index import FrontmatterIndex
+from .models import (
+    VaultBatchFrontmatterUpdateInput,
+    VaultBatchReadInput,
+    VaultDeleteInput,
+    VaultListInput,
+    VaultMoveInput,
+    VaultReadInput,
+    VaultSearchFrontmatterInput,
+    VaultSearchInput,
+    VaultWriteInput,
+)
+from .oauth import oauth_routes
+from .tools.manage import vault_delete as _vault_delete
+from .tools.manage import vault_list as _vault_list
+from .tools.manage import vault_move as _vault_move
+from .tools.read import vault_batch_read as _vault_batch_read
+from .tools.read import vault_read as _vault_read
+from .tools.search import vault_search as _vault_search
+from .tools.search import vault_search_frontmatter as _vault_search_frontmatter
+from .tools.write import vault_batch_frontmatter_update as _vault_batch_frontmatter_update
+from .tools.write import vault_write as _vault_write
 
 logger = logging.getLogger(__name__)
 
@@ -50,35 +82,13 @@ mcp = FastMCP(
     lifespan=lifespan,
     transport_security=TransportSecuritySettings(
         enable_dns_rebinding_protection=True,
-        allowed_hosts=[
-            "127.0.0.1:*",
-            "localhost:*",
-            "[::1]:*",
-            # Add your tunnel hostname here, e.g.:
-            "vps-2557.tail301a28.ts.net",
-            "vault.grzegorzgolas.com",
-        ],
+        # Allowlista hostów reverse-proxy (loopback + Funnel + Caddy) — patrz config.
+        allowed_hosts=VAULT_MCP_ALLOWED_HOSTS,
     ),
 )
 
 
 # --- Register all tools ---
-
-from .tools.read import vault_read as _vault_read, vault_batch_read as _vault_batch_read
-from .tools.write import vault_write as _vault_write, vault_batch_frontmatter_update as _vault_batch_frontmatter_update
-from .tools.search import vault_search as _vault_search, vault_search_frontmatter as _vault_search_frontmatter
-from .tools.manage import vault_list as _vault_list, vault_move as _vault_move, vault_delete as _vault_delete
-from .models import (
-    VaultReadInput,
-    VaultWriteInput,
-    VaultBatchReadInput,
-    VaultBatchFrontmatterUpdateInput,
-    VaultSearchInput,
-    VaultSearchFrontmatterInput,
-    VaultListInput,
-    VaultMoveInput,
-    VaultDeleteInput,
-)
 
 
 @mcp.tool(
@@ -138,7 +148,13 @@ def vault_search(
     context_lines: int = 2,
 ) -> str:
     """Search vault file contents."""
-    inp = VaultSearchInput(query=query, path_prefix=path_prefix, file_pattern=file_pattern, max_results=max_results, context_lines=context_lines)
+    inp = VaultSearchInput(
+        query=query,
+        path_prefix=path_prefix,
+        file_pattern=file_pattern,
+        max_results=max_results,
+        context_lines=context_lines,
+    )
     return _vault_search(inp.query, inp.path_prefix, inp.file_pattern, inp.max_results, inp.context_lines)
 
 
@@ -155,7 +171,9 @@ def vault_search_frontmatter(
     max_results: int = 20,
 ) -> str:
     """Search by frontmatter fields."""
-    inp = VaultSearchFrontmatterInput(field=field, value=value, match_type=match_type, path_prefix=path_prefix, max_results=max_results)
+    inp = VaultSearchFrontmatterInput(
+        field=field, value=value, match_type=match_type, path_prefix=path_prefix, max_results=max_results
+    )
     return _vault_search_frontmatter(inp.field, inp.value, inp.match_type, inp.path_prefix, inp.max_results)
 
 
@@ -172,7 +190,9 @@ def vault_list(
     pattern: str | None = None,
 ) -> str:
     """List vault directory contents."""
-    inp = VaultListInput(path=path, depth=depth, include_files=include_files, include_dirs=include_dirs, pattern=pattern)
+    inp = VaultListInput(
+        path=path, depth=depth, include_files=include_files, include_dirs=include_dirs, pattern=pattern
+    )
     return _vault_list(inp.path, inp.depth, inp.include_files, inp.include_dirs, inp.pattern)
 
 
@@ -199,9 +219,6 @@ def vault_delete(path: str, confirm: bool = False) -> str:
 
 
 # --- RAG search tool (proxied to jarvis-rag on localhost:8765) ---
-
-import os
-import httpx
 
 _RAG_URL = os.environ.get("RAG_INTERNAL_URL", "http://127.0.0.1:8765")
 _RAG_TOKEN = os.environ.get("RAG_TOKEN", "")
@@ -248,7 +265,6 @@ def rag_search(query: str, n_results: int = 5, source_type: str | None = None) -
             text = resp.text
             for line in text.split("\n"):
                 if line.startswith("data: "):
-                    import json as _json
                     data = _json.loads(line[6:])
                     if "result" in data:
                         content = data["result"].get("content", [])
@@ -260,6 +276,30 @@ def rag_search(query: str, n_results: int = 5, source_type: str | None = None) -
             return "RAG search: no response parsed"
     except Exception as e:
         return f"RAG search failed: {e}"
+
+
+class SecurityHeadersMiddleware:
+    """Pure-ASGI middleware — nagłówki bezpieczeństwa na każdej odpowiedzi (audyt s1099,
+    N70, GOLDEN-PATTERNS Wzorzec 8). vault_mcp zwraca JSON/MCP, więc bez CSP."""
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        async def send_with_headers(message):
+            if message["type"] == "http.response.start":
+                headers = MutableHeaders(scope=message)
+                headers.setdefault("X-Content-Type-Options", "nosniff")
+                headers.setdefault("X-Frame-Options", "DENY")
+                headers.setdefault("Referrer-Policy", "no-referrer")
+                headers.setdefault("Strict-Transport-Security", "max-age=31536000")
+            await send(message)
+
+        await self.app(scope, receive, send_with_headers)
 
 
 def main():
@@ -274,36 +314,35 @@ def main():
         logger.error(f"Vault path does not exist: {VAULT_PATH}")
         sys.exit(1)
 
+    # Fail-closed (audyt s1099, S79): bez tokenu NIE startujemy. Wcześniej awaryjna
+    # gałąź uruchamiała mcp.run() BEZ auth na publicznym Funnelu — krytyczna furtka.
     if not VAULT_MCP_TOKEN:
-        logger.warning("VAULT_MCP_TOKEN is not set -- auth will reject all requests")
-
-    # Build the Starlette app with auth middleware and OAuth endpoints
-    try:
-        from .auth import BearerAuthMiddleware
-        from .oauth import oauth_routes
-
-        app = mcp.streamable_http_app()
-
-        # Mount OAuth routes (these are excluded from bearer auth via the middleware)
-        for route in oauth_routes:
-            app.routes.insert(0, route)
-
-        app.add_middleware(BearerAuthMiddleware)
-        logger.info(f"Starting server on port {VAULT_MCP_PORT} with bearer auth + OAuth")
-
-        import uvicorn
-        uvicorn.run(
-            app,
-            host="0.0.0.0",
-            port=VAULT_MCP_PORT,
-            log_level="info",
-            proxy_headers=True,
-            forwarded_allow_ips="*",
+        raise RuntimeError(
+            "VAULT_MCP_TOKEN is not set — refusing to start without bearer auth "
+            "(fail-closed, audyt s1099 S79). Niezautentykowany dostęp do vaulta jest zbyt "
+            "niebezpieczny. Ustaw VAULT_MCP_TOKEN w EnvironmentFile."
         )
-    except Exception as e:
-        logger.warning(f"Could not build app ({e}), falling back to mcp.run()")
-        logger.warning("Auth will NOT be enforced in this mode")
-        mcp.run(transport="streamable-http", port=VAULT_MCP_PORT)
+
+    app = mcp.streamable_http_app()
+
+    # Mount OAuth routes (excluded from bearer auth via the middleware)
+    for route in oauth_routes:
+        app.routes.insert(0, route)
+
+    app.add_middleware(BearerAuthMiddleware)
+    # Nagłówki bezpieczeństwa na każdej odpowiedzi (audyt s1099, N70, Wzorzec 8) —
+    # dodane ostatnie = najbardziej zewnętrzne (obejmują też 401/błędy bramki).
+    app.add_middleware(SecurityHeadersMiddleware)
+    logger.info(f"Starting server on {VAULT_MCP_HOST}:{VAULT_MCP_PORT} with bearer auth + OAuth")
+
+    uvicorn.run(
+        app,
+        host=VAULT_MCP_HOST,
+        port=VAULT_MCP_PORT,
+        log_level="info",
+        proxy_headers=True,
+        forwarded_allow_ips="127.0.0.1",
+    )
 
 
 if __name__ == "__main__":
