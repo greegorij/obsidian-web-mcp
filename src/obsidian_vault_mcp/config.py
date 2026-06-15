@@ -28,6 +28,23 @@ VAULT_MCP_ALLOWED_HOSTS = [
 # (usunięto VAULT_OAUTH_CLIENT_ID/SECRET — martwe, audyt s1099 N71: /oauth/register to
 #  public client PKCE, client_credentials wyłączone, sekret nigdy nie był używany.)
 
+# ── Brama tożsamości Google (s1286, domknięcie K1) ────────────────────────────
+# /oauth/authorize deleguje uwierzytelnienie do logowania Google; kod MCP wydawany
+# tylko gdy zweryfikowany e-mail ∈ VAULT_MCP_ALLOWED_EMAILS. FAIL-CLOSED bez tej
+# konfiguracji (authorize → 503, NIGDY auto-approve). Wspólny mechanizm dla
+# wszystkich MCP — kanon GOLDEN-PATTERNS Wzorzec 9. Sekret klienta = macOS Keychain
+# → EnvironmentFile na VPS (Hard Rule #14). Jeden klient OAuth, adres powrotny per
+# usługa: VAULT_MCP_GOOGLE_OAUTH_REDIRECT_URI = .../oauth/google/callback.
+VAULT_MCP_GOOGLE_OAUTH_CLIENT_ID = os.environ.get("VAULT_MCP_GOOGLE_OAUTH_CLIENT_ID", "")
+VAULT_MCP_GOOGLE_OAUTH_SECRET = os.environ.get("VAULT_MCP_GOOGLE_OAUTH_SECRET", "")
+VAULT_MCP_GOOGLE_OAUTH_REDIRECT_URI = os.environ.get("VAULT_MCP_GOOGLE_OAUTH_REDIRECT_URI", "")
+VAULT_MCP_ALLOWED_EMAILS = [
+    e.strip().lower() for e in os.environ.get("VAULT_MCP_ALLOWED_EMAILS", "").split(",") if e.strip()
+]
+# Tylko dev: auto-approve bez bramy (NIGDY produkcja). Self-audit s1286 złapał fail-open
+# jako blocker — domyślnie wyłączone, brama fail-closed.
+VAULT_MCP_OAUTH_DEV_INSECURE = os.environ.get("VAULT_MCP_OAUTH_DEV_INSECURE", "") == "1"
+
 # Safety limits
 MAX_CONTENT_SIZE = 1_000_000  # 1MB max write size
 MAX_BATCH_SIZE = 20  # Max files per batch operation

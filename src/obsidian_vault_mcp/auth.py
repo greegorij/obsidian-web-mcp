@@ -7,17 +7,11 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse
 
 from .config import VAULT_MCP_TOKEN
+from .oauth import OPEN_PATHS
 
-# Paths that don't require bearer auth (OAuth flow + health)
-_AUTH_EXEMPT_PATHS = {
-    "/health",
-    "/.well-known/oauth-authorization-server",
-    "/.well-known/oauth-protected-resource",
-    "/.well-known/oauth-protected-resource/mcp",
-    "/oauth/authorize",
-    "/oauth/token",
-    "/oauth/register",
-}
+# Ścieżki bez bearer-auth: /health + cały pre-auth flow OAuth (wyprowadzony z bramy =
+# single source, obejmuje /oauth/google/callback dodany w s1286).
+_AUTH_EXEMPT_PATHS = {"/health"} | OPEN_PATHS
 
 
 class BearerAuthMiddleware(BaseHTTPMiddleware):
