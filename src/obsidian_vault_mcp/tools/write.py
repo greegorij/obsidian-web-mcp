@@ -38,11 +38,13 @@ def vault_write(path: str, content: str, create_dirs: bool = True, merge_frontma
         commit_vault_change([path], "write")
 
         return json.dumps({"path": path, "created": is_new, "size": size})
-    except ValueError as e:
-        return json.dumps({"error": str(e), "path": path})
-    except Exception as e:
-        logger.error(f"vault_write error for {path}: {e}")
-        return json.dumps({"error": str(e), "path": path})
+    except ValueError:
+        # Komunikat generyczny do klienta (audyt s1099, S78) — pełny kontekst w logach serwisu.
+        logger.exception(f"vault_write invalid path/content: {path}")
+        return json.dumps({"error": "Invalid path or content", "path": path})
+    except Exception:
+        logger.exception(f"vault_write unexpected error: {path}")
+        return json.dumps({"error": "Internal error writing file", "path": path})
 
 
 def vault_batch_frontmatter_update(updates: list[dict]) -> str:
@@ -68,10 +70,13 @@ def vault_batch_frontmatter_update(updates: list[dict]) -> str:
             updated_paths.append(file_path)
         except FileNotFoundError:
             results.append({"path": file_path, "updated": False, "error": "File not found"})
-        except ValueError as e:
-            results.append({"path": file_path, "updated": False, "error": str(e)})
-        except Exception as e:
-            results.append({"path": file_path, "updated": False, "error": str(e)})
+        except ValueError:
+            # Komunikat generyczny do klienta (audyt s1099, S78) — pełny kontekst w logach serwisu.
+            logger.exception(f"batch_frontmatter_update invalid: {file_path}")
+            results.append({"path": file_path, "updated": False, "error": "Invalid path or content"})
+        except Exception:
+            logger.exception(f"batch_frontmatter_update unexpected error: {file_path}")
+            results.append({"path": file_path, "updated": False, "error": "Internal error updating frontmatter"})
 
     # PDCA-014 auto-commit zaktualizowanych plików (łatka git_ops)
     if updated_paths:

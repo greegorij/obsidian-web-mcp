@@ -283,8 +283,10 @@ def rag_search(query: str, n_results: int = 5, source_type: str | None = None) -
                         return f"RAG error: {data['error'].get('message', 'unknown')}"
 
             return "RAG search: no response parsed"
-    except Exception as e:
-        return f"RAG search failed: {e}"
+    except Exception:
+        # Komunikat generyczny do klienta (audyt s1099, S78) — pełny kontekst w logach serwisu.
+        logger.exception("rag_search failed")
+        return "Internal error during RAG search"
 
 
 class SecurityHeadersMiddleware:

@@ -26,13 +26,15 @@ def vault_list(
             pattern=pattern,
         )
         return json.dumps({"items": items, "total": len(items)})
-    except ValueError as e:
-        return json.dumps({"error": str(e)})
+    except ValueError:
+        # Komunikat generyczny do klienta (audyt s1099, S78) — pełny kontekst w logach serwisu.
+        logger.exception(f"vault_list invalid path: {path}")
+        return json.dumps({"error": "Invalid path", "path": path})
     except FileNotFoundError:
         return json.dumps({"error": f"Directory not found: {path}"})
-    except Exception as e:
-        logger.error(f"vault_list error: {e}")
-        return json.dumps({"error": str(e)})
+    except Exception:
+        logger.exception(f"vault_list unexpected error: {path}")
+        return json.dumps({"error": "Internal error listing directory", "path": path})
 
 
 def vault_move(source: str, destination: str, create_dirs: bool = True) -> str:
@@ -41,11 +43,13 @@ def vault_move(source: str, destination: str, create_dirs: bool = True) -> str:
         moved = move_path(source, destination, create_dirs=create_dirs)
         commit_vault_change([source, destination], "move")
         return json.dumps({"source": source, "destination": destination, "moved": moved})
-    except ValueError as e:
-        return json.dumps({"error": str(e), "source": source, "destination": destination})
-    except Exception as e:
-        logger.error(f"vault_move error: {e}")
-        return json.dumps({"error": str(e), "source": source, "destination": destination})
+    except ValueError:
+        # Komunikat generyczny do klienta (audyt s1099, S78) — pełny kontekst w logach serwisu.
+        logger.exception(f"vault_move invalid path: {source} -> {destination}")
+        return json.dumps({"error": "Invalid path", "source": source, "destination": destination})
+    except Exception:
+        logger.exception(f"vault_move unexpected error: {source} -> {destination}")
+        return json.dumps({"error": "Internal error moving path", "source": source, "destination": destination})
 
 
 def vault_delete(path: str, confirm: bool = False) -> str:
@@ -62,8 +66,10 @@ def vault_delete(path: str, confirm: bool = False) -> str:
         deleted = delete_path(path)
         commit_vault_change([path], "delete")
         return json.dumps({"path": path, "deleted": deleted})
-    except ValueError as e:
-        return json.dumps({"error": str(e), "path": path})
-    except Exception as e:
-        logger.error(f"vault_delete error: {e}")
-        return json.dumps({"error": str(e), "path": path})
+    except ValueError:
+        # Komunikat generyczny do klienta (audyt s1099, S78) — pełny kontekst w logach serwisu.
+        logger.exception(f"vault_delete invalid path: {path}")
+        return json.dumps({"error": "Invalid path", "path": path})
+    except Exception:
+        logger.exception(f"vault_delete unexpected error: {path}")
+        return json.dumps({"error": "Internal error deleting file", "path": path})
