@@ -180,11 +180,13 @@ def vault_search(
                 "truncated": truncated,
             }
         )
-    except ValueError as e:
-        return json.dumps({"error": str(e)})
-    except Exception as e:
-        logger.error(f"vault_search error: {e}")
-        return json.dumps({"error": str(e)})
+    except ValueError:
+        # Komunikat generyczny do klienta (audyt s1099, S78) — pełny kontekst w logach serwisu.
+        logger.exception(f"vault_search invalid argument (path_prefix={path_prefix!r})")
+        return json.dumps({"error": "Invalid search path"})
+    except Exception:
+        logger.exception(f"vault_search unexpected error (query={query!r})")
+        return json.dumps({"error": "Internal error during search"})
 
 
 def vault_search_frontmatter(
@@ -227,6 +229,7 @@ def vault_search_frontmatter(
                 "truncated": truncated,
             }
         )
-    except Exception as e:
-        logger.error(f"vault_search_frontmatter error: {e}")
-        return json.dumps({"error": str(e)})
+    except Exception:
+        # Komunikat generyczny do klienta (audyt s1099, S78) — pełny kontekst w logach serwisu.
+        logger.exception(f"vault_search_frontmatter unexpected error (field={field!r})")
+        return json.dumps({"error": "Internal error during search"})
