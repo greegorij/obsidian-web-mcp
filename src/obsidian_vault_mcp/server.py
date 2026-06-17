@@ -8,6 +8,8 @@ import json as _json
 import logging
 import os
 import sys
+import threading
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
 import httpx
@@ -55,12 +57,19 @@ logger = logging.getLogger(__name__)
 # at module level: built once, watched by watchdog, shared across sessions.
 frontmatter_index = FrontmatterIndex()
 _index_started = False
+# N72 (audyt s1099): check-then-act na fladze globalnej NIE jest „thread-safe via GIL"
+# (poprzedni komentarz wprowadzał w błąd) — między sprawdzeniem `if not _index_started`
+# a ustawieniem True inny wątek mógłby wejść i podwójnie wystartować indeks. Lock domyka
+# to do prawdziwej idempotencji (kontencja tylko na zimnym starcie).
+_index_lock = threading.Lock()
 
 
-def _ensure_index():
-    """Start the index exactly once (thread-safe via GIL)."""
+def _ensure_index() -> None:
+    """Start the index exactly once (idempotentne, strzeżone lockiem)."""
     global _index_started
-    if not _index_started:
+    with _index_lock:
+        if _index_started:
+            return
         logger.info(f"Starting vault MCP server. Vault: {VAULT_PATH}")
         frontmatter_index.start()
         logger.info(f"Frontmatter index built: {frontmatter_index.file_count} files indexed")
@@ -68,7 +77,7 @@ def _ensure_index():
 
 
 @asynccontextmanager
-async def lifespan(server):
+async def lifespan(server) -> AsyncIterator[dict]:
     """Ensure index is ready; yield it to the session."""
     _ensure_index()
     yield {"frontmatter_index": frontmatter_index}
@@ -302,7 +311,7 @@ class SecurityHeadersMiddleware:
         await self.app(scope, receive, send_with_headers)
 
 
-def main():
+def main() -> None:
     """Entry point. Run with streamable HTTP transport."""
     logging.basicConfig(
         level=logging.INFO,

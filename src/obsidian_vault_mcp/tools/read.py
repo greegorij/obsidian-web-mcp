@@ -20,7 +20,7 @@ def vault_read(path: str) -> str:
             post = frontmatter.loads(content)
             if post.metadata:
                 fm_data = post.metadata
-        except Exception:
+        except Exception:  # noqa: S110  # brak/uszkodzony frontmatter jest dozwolony — fm_data zostaje None
             pass
 
         return json.dumps(
@@ -57,7 +57,7 @@ def vault_batch_read(paths: list[str], include_content: bool = True) -> str:
                 post = frontmatter.loads(content)
                 if post.metadata:
                     fm_data = post.metadata
-            except Exception:
+            except Exception:  # noqa: S110  # brak/uszkodzony frontmatter jest dozwolony — fm_data zostaje None
                 pass
 
             entry = {
