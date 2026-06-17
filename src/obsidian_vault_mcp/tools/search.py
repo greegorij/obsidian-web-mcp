@@ -29,12 +29,16 @@ def _search_ripgrep(
         f"--glob={file_pattern}",
         "-i",
         f"--context={context_lines}",
-        query,
-        str(search_path),
     ]
 
     for excluded in config.EXCLUDED_DIRS:
-        cmd.insert(-2, f"--glob=!{excluded}/")
+        cmd.append(f"--glob=!{excluded}/")
+
+    # S53 (audyt s1099): `--` kończy opcje rg — query/ścieżka są pozycyjne nawet gdy query
+    # zaczyna się od `-`. Bez tego query typu `--pre=<cmd>` byłby interpretowany jako flaga
+    # ripgrepa (m.in. `--pre` = uruchomienie preprocesora → RCE). Wykluczenia (--glob=!) muszą
+    # zostać PRZED `--`, dlatego budujemy flagi najpierw, a pozycyjne dokładamy po separatorze.
+    cmd += ["--", query, str(search_path)]
 
     try:
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
