@@ -4,6 +4,7 @@ from pathlib import Path
 # Vault configuration
 VAULT_PATH = Path(os.environ.get("VAULT_PATH", os.path.expanduser("~/Obsidian/MyVault")))
 VAULT_MCP_TOKEN = os.environ.get("VAULT_MCP_TOKEN", "")
+VAULT_MCP_TOKEN_PREVIOUS = os.environ.get("VAULT_MCP_TOKEN_PREVIOUS", "")
 VAULT_MCP_PORT = int(os.environ.get("VAULT_MCP_PORT", "8420"))
 # Bind loopback domyślnie (audyt s1099, secure-coding §5) — dostęp przez Funnel/Caddy.
 VAULT_MCP_HOST = os.environ.get("VAULT_MCP_HOST", "127.0.0.1")

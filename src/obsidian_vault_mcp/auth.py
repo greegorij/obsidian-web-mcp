@@ -6,7 +6,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 
-from .config import VAULT_MCP_TOKEN
+from .config import VAULT_MCP_TOKEN, VAULT_MCP_TOKEN_PREVIOUS
 from .oauth import OPEN_PATHS
 
 # Ścieżki bez bearer-auth: /health + cały pre-auth flow OAuth (wyprowadzony z bramy =
@@ -37,10 +37,16 @@ class BearerAuthMiddleware(BaseHTTPMiddleware):
         # Constant-time comparison — the gate guards every MCP request, a plain
         # ==/!= is a timing side-channel on the static token (audyt s1099, W20).
         token = auth_header[7:]
-        if not hmac.compare_digest(token.encode("utf-8"), VAULT_MCP_TOKEN.encode("utf-8")):
-            return JSONResponse(
-                {"error": "Invalid token"},
-                status_code=401,
-            )
+        token_bytes = token.encode("utf-8")
+        if hmac.compare_digest(token_bytes, VAULT_MCP_TOKEN.encode("utf-8")):
+            return await call_next(request)
 
-        return await call_next(request)
+        # Optional previous token for zero-downtime client cutover during rotation.
+        previous = VAULT_MCP_TOKEN_PREVIOUS
+        if previous and hmac.compare_digest(token_bytes, previous.encode("utf-8")):
+            return await call_next(request)
+
+        return JSONResponse(
+            {"error": "Invalid token"},
+            status_code=401,
+        )
