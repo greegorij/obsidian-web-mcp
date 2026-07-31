@@ -5,13 +5,21 @@ import logging
 import frontmatter
 
 from ..git_ops import commit_vault_change
-from ..vault import read_file, resolve_vault_path, write_file_atomic
+from ..vault import (
+    append_file,
+    create_file_exclusive,
+    read_file,
+    resolve_vault_path,
+    write_file_atomic,
+)
 from . import json_utils as json
 
 logger = logging.getLogger(__name__)
 
 
-def vault_write(path: str, content: str, create_dirs: bool = True, merge_frontmatter: bool = False) -> str:
+def vault_write(
+    path: str, content: str, create_dirs: bool = True, merge_frontmatter: bool = False
+) -> str:
     """Write a file to the vault, optionally merging frontmatter with existing content."""
     try:
         resolve_vault_path(path)
@@ -30,7 +38,9 @@ def vault_write(path: str, content: str, create_dirs: bool = True, merge_frontma
             except FileNotFoundError:
                 pass
             except Exception as e:
-                logger.warning(f"Frontmatter merge failed for {path}, writing as-is: {e}")
+                logger.warning(
+                    f"Frontmatter merge failed for {path}, writing as-is: {e}"
+                )
 
         is_new, size = write_file_atomic(path, content, create_dirs=create_dirs)
 
@@ -45,6 +55,55 @@ def vault_write(path: str, content: str, create_dirs: bool = True, merge_frontma
     except Exception:
         logger.exception(f"vault_write unexpected error: {path}")
         return json.dumps({"error": "Internal error writing file", "path": path})
+
+
+def vault_create(path: str, content: str, create_dirs: bool = True) -> str:
+    """Create a new vault file; refuse if the path already exists (no overwrite)."""
+    try:
+        size = create_file_exclusive(path, content, create_dirs=create_dirs)
+        commit_vault_change([path], "create")
+        return json.dumps({"path": path, "created": True, "size": size})
+    except FileExistsError:
+        return json.dumps({"error": "File already exists", "path": path})
+    except ValueError:
+        logger.exception(f"vault_create invalid path/content: {path}")
+        return json.dumps({"error": "Invalid path or content", "path": path})
+    except Exception:
+        logger.exception(f"vault_create unexpected error: {path}")
+        return json.dumps({"error": "Internal error creating file", "path": path})
+
+
+def vault_append(
+    path: str,
+    content: str,
+    *,
+    create_if_missing: bool = False,
+    create_dirs: bool = True,
+) -> str:
+    """Append to an existing file, or create when create_if_missing; never overwrite body."""
+    try:
+        _, size = append_file(
+            path,
+            content,
+            create_if_missing=create_if_missing,
+            create_dirs=create_dirs,
+        )
+        commit_vault_change([path], "append")
+        return json.dumps(
+            {
+                "path": path,
+                "appended": True,
+                "size": size,
+            }
+        )
+    except FileNotFoundError:
+        return json.dumps({"error": "File not found", "path": path})
+    except ValueError:
+        logger.exception("vault_append invalid path/content")
+        return json.dumps({"error": "Invalid path or content", "path": path})
+    except Exception:
+        logger.exception("vault_append unexpected error")
+        return json.dumps({"error": "Internal error appending file", "path": path})
 
 
 def vault_batch_frontmatter_update(updates: list[dict]) -> str:
@@ -69,14 +128,28 @@ def vault_batch_frontmatter_update(updates: list[dict]) -> str:
             results.append({"path": file_path, "updated": True})
             updated_paths.append(file_path)
         except FileNotFoundError:
-            results.append({"path": file_path, "updated": False, "error": "File not found"})
+            results.append(
+                {"path": file_path, "updated": False, "error": "File not found"}
+            )
         except ValueError:
             # Komunikat generyczny do klienta (audyt s1099, S78) — pełny kontekst w logach serwisu.
             logger.exception(f"batch_frontmatter_update invalid: {file_path}")
-            results.append({"path": file_path, "updated": False, "error": "Invalid path or content"})
+            results.append(
+                {
+                    "path": file_path,
+                    "updated": False,
+                    "error": "Invalid path or content",
+                }
+            )
         except Exception:
             logger.exception(f"batch_frontmatter_update unexpected error: {file_path}")
-            results.append({"path": file_path, "updated": False, "error": "Internal error updating frontmatter"})
+            results.append(
+                {
+                    "path": file_path,
+                    "updated": False,
+                    "error": "Internal error updating frontmatter",
+                }
+            )
 
     # PDCA-014 auto-commit zaktualizowanych plików (łatka git_ops)
     if updated_paths:

@@ -53,6 +53,54 @@ class VaultWriteInput(BaseModel):
     )
 
 
+class VaultCreateInput(BaseModel):
+    """Create a new vault file; fails if the path already exists."""
+
+    model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
+
+    path: str = Field(
+        ...,
+        description="Relative path from vault root for the new file",
+        min_length=1,
+        max_length=500,
+    )
+    content: str = Field(
+        ...,
+        description="Full file content for the new file",
+        max_length=MAX_CONTENT_SIZE,
+    )
+    create_dirs: bool = Field(
+        default=True,
+        description="Create parent directories if they don't exist",
+    )
+
+
+class VaultAppendInput(BaseModel):
+    """Append content to an existing vault file (or create when create_if_missing)."""
+
+    model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
+
+    path: str = Field(
+        ...,
+        description="Relative path from vault root",
+        min_length=1,
+        max_length=500,
+    )
+    content: str = Field(
+        ...,
+        description="Content to append (never replaces existing body)",
+        max_length=MAX_CONTENT_SIZE,
+    )
+    create_if_missing: bool = Field(
+        default=False,
+        description="If true, create the file when missing; if false, missing path is an error",
+    )
+    create_dirs: bool = Field(
+        default=True,
+        description="Create parent directories when creating a missing file",
+    )
+
+
 class VaultListInput(BaseModel):
     """List files and directories under a vault path."""
 
@@ -226,7 +274,11 @@ class VaultBatchFrontmatterUpdateInput(BaseModel):
     def validate_updates(cls, v: list[dict]) -> list[dict]:
         for i, item in enumerate(v):
             if "path" not in item or not isinstance(item["path"], str):
-                raise ValueError(f"updates[{i}] must contain a 'path' key with a string value")
+                raise ValueError(
+                    f"updates[{i}] must contain a 'path' key with a string value"
+                )
             if "fields" not in item or not isinstance(item["fields"], dict):
-                raise ValueError(f"updates[{i}] must contain a 'fields' key with a dict value")
+                raise ValueError(
+                    f"updates[{i}] must contain a 'fields' key with a dict value"
+                )
         return v
