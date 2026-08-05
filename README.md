@@ -145,6 +145,12 @@ allowed_hosts=[
 ],
 ```
 
+## Production Deployment (VPS / systemd)
+
+The canonical VPS unit definition lives in [`deploy/jarvis-mcp.service`](deploy/jarvis-mcp.service). Secrets and runtime config go in a separate `EnvironmentFile` (see the unit) — not inline `Environment=` lines in the service file.
+
+Installing or restarting the unit on a host is a separate, conscious deployment step. Merging this repository does not deploy or restart the service.
+
 ## Production Deployment (macOS)
 
 For always-on operation, use launchd to run both the MCP server and the Cloudflare Tunnel as persistent background services that start at login and restart on failure.
@@ -229,6 +235,8 @@ tests/
 scripts/
     setup-tunnel.sh         # Interactive Cloudflare Tunnel setup
     launchd/                # macOS launchd plist templates
+deploy/
+    jarvis-mcp.service      # Canonical VPS systemd unit (secrets via EnvironmentFile)
 ```
 
 ## License

@@ -1,0 +1,14 @@
+[Unit]
+Description=Jarvis Obsidian MCP Server
+After=network.target
+
+[Service]
+User=ccuser
+WorkingDirectory=/home/ccuser/obsidian-web-mcp
+EnvironmentFile=/home/ccuser/.jarvis-mcp.env
+ExecStart=/home/ccuser/.local/bin/uv run vault-mcp
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
