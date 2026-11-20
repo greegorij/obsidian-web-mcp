@@ -20,6 +20,14 @@ dependencies = [
     #     Nie używamy secrets_dir ani BaseSettings w kodzie repo — blast radius zerowy.
     # Podłoga bez sufitu (wzorzec jarvis-infra #231) — górną granicę trzyma mcp.
     "pydantic-settings>=2.14.2",
+    # Rama testów bezpieczeństwa (20.11.2026): pyjwt i anyio tranzytywne (mcp[cli]),
+    # przypięte JAWNIE, bo usługa jest wystawiona do internetu, a uv.lock nie jest w repo:
+    #   pyjwt <2.15.0 — m.in. fałszowanie tokenu pustym kluczem HMAC przez JWK,
+    #     obejście weryfikacji roszczeń, odmowa usługi przy zagnieżdżonym nagłówku.
+    #   anyio <4.14.2 — podszycie certyfikatu TLS (kodowanie IDNA 2003), zawieszenie procesów.
+    # Podłogi bez sufitu — górną granicę trzyma mcp. Wyrównane z forkiem obsidian-web-mcp.
+    "pyjwt>=2.15.0",
+    "anyio>=4.14.2",
 ]
 
 [project.optional-dependencies]
