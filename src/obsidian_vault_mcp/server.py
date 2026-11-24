@@ -49,9 +49,7 @@ from .tools.read import vault_read as _vault_read
 from .tools.search import vault_search as _vault_search
 from .tools.search import vault_search_frontmatter as _vault_search_frontmatter
 from .tools.write import vault_append as _vault_append
-from .tools.write import (
-    vault_batch_frontmatter_update as _vault_batch_frontmatter_update,
-)
+from .tools.write import vault_batch_frontmatter_update as _vault_batch_frontmatter_update
 from .tools.write import vault_create as _vault_create
 from .tools.write import vault_write as _vault_write
 
@@ -78,9 +76,7 @@ def _ensure_index() -> None:
             return
         logger.info(f"Starting vault MCP server. Vault: {VAULT_PATH}")
         frontmatter_index.start()
-        logger.info(
-            f"Frontmatter index built: {frontmatter_index.file_count} files indexed"
-        )
+        logger.info(f"Frontmatter index built: {frontmatter_index.file_count} files indexed")
         _index_started = True
 
 
@@ -111,12 +107,7 @@ mcp = FastMCP(
 @mcp.tool(
     name="vault_read",
     description="Read a file from the Obsidian vault, returning content, metadata, and parsed YAML frontmatter.",
-    annotations={
-        "readOnlyHint": True,
-        "destructiveHint": False,
-        "idempotentHint": True,
-        "openWorldHint": False,
-    },
+    annotations={"readOnlyHint": True, "destructiveHint": False, "idempotentHint": True, "openWorldHint": False},
 )
 def vault_read(path: str) -> str:
     """Read a file from the vault."""
@@ -127,12 +118,7 @@ def vault_read(path: str) -> str:
 @mcp.tool(
     name="vault_batch_read",
     description="Read multiple files from the vault in one call. Handles missing files gracefully.",
-    annotations={
-        "readOnlyHint": True,
-        "destructiveHint": False,
-        "idempotentHint": True,
-        "openWorldHint": False,
-    },
+    annotations={"readOnlyHint": True, "destructiveHint": False, "idempotentHint": True, "openWorldHint": False},
 )
 def vault_batch_read(paths: list[str], include_content: bool = True) -> str:
     """Read multiple files at once."""
@@ -143,35 +129,18 @@ def vault_batch_read(paths: list[str], include_content: bool = True) -> str:
 @mcp.tool(
     name="vault_write",
     description="Write a file to the Obsidian vault. Supports frontmatter merging with existing files. Creates parent directories by default.",
-    annotations={
-        "readOnlyHint": False,
-        "destructiveHint": True,
-        "idempotentHint": False,
-        "openWorldHint": False,
-    },
+    annotations={"readOnlyHint": False, "destructiveHint": True, "idempotentHint": False, "openWorldHint": False},
 )
-def vault_write(
-    path: str, content: str, create_dirs: bool = True, merge_frontmatter: bool = False
-) -> str:
+def vault_write(path: str, content: str, create_dirs: bool = True, merge_frontmatter: bool = False) -> str:
     """Write a file to the vault."""
-    inp = VaultWriteInput(
-        path=path,
-        content=content,
-        create_dirs=create_dirs,
-        merge_frontmatter=merge_frontmatter,
-    )
+    inp = VaultWriteInput(path=path, content=content, create_dirs=create_dirs, merge_frontmatter=merge_frontmatter)
     return _vault_write(inp.path, inp.content, inp.create_dirs, inp.merge_frontmatter)
 
 
 @mcp.tool(
     name="vault_create",
     description="Create a new file in the Obsidian vault. Refuses if the path already exists — never overwrites.",
-    annotations={
-        "readOnlyHint": False,
-        "destructiveHint": False,
-        "idempotentHint": False,
-        "openWorldHint": False,
-    },
+    annotations={"readOnlyHint": False, "destructiveHint": False, "idempotentHint": False, "openWorldHint": False},
 )
 def vault_create(path: str, content: str, create_dirs: bool = True) -> str:
     """Create a new vault file without overwriting."""
@@ -182,12 +151,7 @@ def vault_create(path: str, content: str, create_dirs: bool = True) -> str:
 @mcp.tool(
     name="vault_append",
     description="Append content to an existing vault file. With create_if_missing=true, creates the file when absent. Never replaces existing body content.",
-    annotations={
-        "readOnlyHint": False,
-        "destructiveHint": False,
-        "idempotentHint": False,
-        "openWorldHint": False,
-    },
+    annotations={"readOnlyHint": False, "destructiveHint": False, "idempotentHint": False, "openWorldHint": False},
 )
 def vault_append(
     path: str,
@@ -213,12 +177,7 @@ def vault_append(
 @mcp.tool(
     name="vault_batch_frontmatter_update",
     description="Update YAML frontmatter fields on multiple files without changing body content. Each update merges new fields into existing frontmatter.",
-    annotations={
-        "readOnlyHint": False,
-        "destructiveHint": False,
-        "idempotentHint": True,
-        "openWorldHint": False,
-    },
+    annotations={"readOnlyHint": False, "destructiveHint": False, "idempotentHint": True, "openWorldHint": False},
 )
 def vault_batch_frontmatter_update(updates: list[dict]) -> str:
     """Batch update frontmatter fields."""
@@ -229,12 +188,7 @@ def vault_batch_frontmatter_update(updates: list[dict]) -> str:
 @mcp.tool(
     name="vault_search",
     description="Search for text across vault files. Uses ripgrep if available, falls back to Python. Returns matching lines with context and frontmatter excerpts.",
-    annotations={
-        "readOnlyHint": True,
-        "destructiveHint": False,
-        "idempotentHint": True,
-        "openWorldHint": False,
-    },
+    annotations={"readOnlyHint": True, "destructiveHint": False, "idempotentHint": True, "openWorldHint": False},
 )
 def vault_search(
     query: str,
@@ -251,20 +205,13 @@ def vault_search(
         max_results=max_results,
         context_lines=context_lines,
     )
-    return _vault_search(
-        inp.query, inp.path_prefix, inp.file_pattern, inp.max_results, inp.context_lines
-    )
+    return _vault_search(inp.query, inp.path_prefix, inp.file_pattern, inp.max_results, inp.context_lines)
 
 
 @mcp.tool(
     name="vault_search_frontmatter",
     description="Search vault files by YAML frontmatter field values. Queries an in-memory index for fast results. Supports exact match, contains, and field-exists queries.",
-    annotations={
-        "readOnlyHint": True,
-        "destructiveHint": False,
-        "idempotentHint": True,
-        "openWorldHint": False,
-    },
+    annotations={"readOnlyHint": True, "destructiveHint": False, "idempotentHint": True, "openWorldHint": False},
 )
 def vault_search_frontmatter(
     field: str,
@@ -275,26 +222,15 @@ def vault_search_frontmatter(
 ) -> str:
     """Search by frontmatter fields."""
     inp = VaultSearchFrontmatterInput(
-        field=field,
-        value=value,
-        match_type=match_type,
-        path_prefix=path_prefix,
-        max_results=max_results,
+        field=field, value=value, match_type=match_type, path_prefix=path_prefix, max_results=max_results
     )
-    return _vault_search_frontmatter(
-        inp.field, inp.value, inp.match_type, inp.path_prefix, inp.max_results
-    )
+    return _vault_search_frontmatter(inp.field, inp.value, inp.match_type, inp.path_prefix, inp.max_results)
 
 
 @mcp.tool(
     name="vault_list",
     description="List directory contents in the vault. Supports recursion depth, file/dir filtering, and glob patterns. Excludes .obsidian, .trash, .git directories.",
-    annotations={
-        "readOnlyHint": True,
-        "destructiveHint": False,
-        "idempotentHint": True,
-        "openWorldHint": False,
-    },
+    annotations={"readOnlyHint": True, "destructiveHint": False, "idempotentHint": True, "openWorldHint": False},
 )
 def vault_list(
     path: str = "",
@@ -305,44 +241,26 @@ def vault_list(
 ) -> str:
     """List vault directory contents."""
     inp = VaultListInput(
-        path=path,
-        depth=depth,
-        include_files=include_files,
-        include_dirs=include_dirs,
-        pattern=pattern,
+        path=path, depth=depth, include_files=include_files, include_dirs=include_dirs, pattern=pattern
     )
-    return _vault_list(
-        inp.path, inp.depth, inp.include_files, inp.include_dirs, inp.pattern
-    )
+    return _vault_list(inp.path, inp.depth, inp.include_files, inp.include_dirs, inp.pattern)
 
 
 @mcp.tool(
     name="vault_move",
     description="Move a file or directory within the vault. Validates both source and destination paths.",
-    annotations={
-        "readOnlyHint": False,
-        "destructiveHint": True,
-        "idempotentHint": False,
-        "openWorldHint": False,
-    },
+    annotations={"readOnlyHint": False, "destructiveHint": True, "idempotentHint": False, "openWorldHint": False},
 )
 def vault_move(source: str, destination: str, create_dirs: bool = True) -> str:
     """Move a file or directory."""
-    inp = VaultMoveInput(
-        source=source, destination=destination, create_dirs=create_dirs
-    )
+    inp = VaultMoveInput(source=source, destination=destination, create_dirs=create_dirs)
     return _vault_move(inp.source, inp.destination, inp.create_dirs)
 
 
 @mcp.tool(
     name="vault_delete",
     description="Delete a file by moving it to .trash/ in the vault root. Requires confirm=true as a safety gate. Does NOT hard delete.",
-    annotations={
-        "readOnlyHint": False,
-        "destructiveHint": True,
-        "idempotentHint": False,
-        "openWorldHint": False,
-    },
+    annotations={"readOnlyHint": False, "destructiveHint": True, "idempotentHint": False, "openWorldHint": False},
 )
 def vault_delete(path: str, confirm: bool = False) -> str:
     """Delete a file (move to .trash/)."""
@@ -362,12 +280,7 @@ _RAG_TOKEN = os.environ.get("RAG_TOKEN", "")
     "Returns the most relevant chunks with source info. "
     "Use for questions like 'where is the SLK contract?', 'what did we decide about pricing?', "
     "'find Borycka contact details'. Query in Polish or English.",
-    annotations={
-        "readOnlyHint": True,
-        "destructiveHint": False,
-        "idempotentHint": True,
-        "openWorldHint": False,
-    },
+    annotations={"readOnlyHint": True, "destructiveHint": False, "idempotentHint": True, "openWorldHint": False},
 )
 def rag_search(query: str, n_results: int = 5, source_type: str | None = None) -> str:
     """Search RAG index via internal HTTP call to jarvis-rag."""
@@ -472,9 +385,7 @@ def main() -> None:
     # Nagłówki bezpieczeństwa na każdej odpowiedzi (audyt s1099, N70, Wzorzec 8) —
     # dodane ostatnie = najbardziej zewnętrzne (obejmują też 401/błędy bramki).
     app.add_middleware(SecurityHeadersMiddleware)
-    logger.info(
-        f"Starting server on {VAULT_MCP_HOST}:{VAULT_MCP_PORT} with bearer auth + OAuth"
-    )
+    logger.info(f"Starting server on {VAULT_MCP_HOST}:{VAULT_MCP_PORT} with bearer auth + OAuth")
 
     uvicorn.run(
         app,

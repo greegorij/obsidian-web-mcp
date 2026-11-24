@@ -5,21 +5,13 @@ import logging
 import frontmatter
 
 from ..git_ops import commit_vault_change
-from ..vault import (
-    append_file,
-    create_file_exclusive,
-    read_file,
-    resolve_vault_path,
-    write_file_atomic,
-)
+from ..vault import append_file, create_file_exclusive, read_file, resolve_vault_path, write_file_atomic
 from . import json_utils as json
 
 logger = logging.getLogger(__name__)
 
 
-def vault_write(
-    path: str, content: str, create_dirs: bool = True, merge_frontmatter: bool = False
-) -> str:
+def vault_write(path: str, content: str, create_dirs: bool = True, merge_frontmatter: bool = False) -> str:
     """Write a file to the vault, optionally merging frontmatter with existing content."""
     try:
         resolve_vault_path(path)
@@ -38,9 +30,7 @@ def vault_write(
             except FileNotFoundError:
                 pass
             except Exception as e:
-                logger.warning(
-                    f"Frontmatter merge failed for {path}, writing as-is: {e}"
-                )
+                logger.warning(f"Frontmatter merge failed for {path}, writing as-is: {e}")
 
         is_new, size = write_file_atomic(path, content, create_dirs=create_dirs)
 
@@ -128,28 +118,14 @@ def vault_batch_frontmatter_update(updates: list[dict]) -> str:
             results.append({"path": file_path, "updated": True})
             updated_paths.append(file_path)
         except FileNotFoundError:
-            results.append(
-                {"path": file_path, "updated": False, "error": "File not found"}
-            )
+            results.append({"path": file_path, "updated": False, "error": "File not found"})
         except ValueError:
             # Komunikat generyczny do klienta (audyt s1099, S78) — pełny kontekst w logach serwisu.
             logger.exception(f"batch_frontmatter_update invalid: {file_path}")
-            results.append(
-                {
-                    "path": file_path,
-                    "updated": False,
-                    "error": "Invalid path or content",
-                }
-            )
+            results.append({"path": file_path, "updated": False, "error": "Invalid path or content"})
         except Exception:
             logger.exception(f"batch_frontmatter_update unexpected error: {file_path}")
-            results.append(
-                {
-                    "path": file_path,
-                    "updated": False,
-                    "error": "Internal error updating frontmatter",
-                }
-            )
+            results.append({"path": file_path, "updated": False, "error": "Internal error updating frontmatter"})
 
     # PDCA-014 auto-commit zaktualizowanych plików (łatka git_ops)
     if updated_paths:
