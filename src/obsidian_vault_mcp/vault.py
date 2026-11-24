@@ -32,10 +32,7 @@ def resolve_vault_path(relative_path: str) -> Path:
     resolved = (config.VAULT_PATH / relative_path).resolve()
     vault_root = config.VAULT_PATH.resolve()
 
-    if (
-        not str(resolved).startswith(str(vault_root) + os.sep)
-        and resolved != vault_root
-    ):
+    if not str(resolved).startswith(str(vault_root) + os.sep) and resolved != vault_root:
         raise ValueError("Path resolves outside the vault root")
 
     return resolved
@@ -62,17 +59,13 @@ def read_file(relative_path: str) -> tuple[str, dict]:
     metadata = {
         "size": stat.st_size,
         "modified": _iso_timestamp(stat.st_mtime),
-        "created": _iso_timestamp(
-            stat.st_birthtime if hasattr(stat, "st_birthtime") else stat.st_ctime
-        ),
+        "created": _iso_timestamp(stat.st_birthtime if hasattr(stat, "st_birthtime") else stat.st_ctime),
     }
 
     return content, metadata
 
 
-def write_file_atomic(
-    relative_path: str, content: str, create_dirs: bool = True
-) -> tuple[bool, int]:
+def write_file_atomic(relative_path: str, content: str, create_dirs: bool = True) -> tuple[bool, int]:
     """Write content to a file atomically.
 
     Returns (is_new_file, bytes_written). Writes to a tempfile in the same
@@ -80,9 +73,7 @@ def write_file_atomic(
     """
     encoded = content.encode("utf-8")
     if len(encoded) > config.MAX_CONTENT_SIZE:
-        raise ValueError(
-            f"Content size {len(encoded)} bytes exceeds limit of {config.MAX_CONTENT_SIZE} bytes"
-        )
+        raise ValueError(f"Content size {len(encoded)} bytes exceeds limit of {config.MAX_CONTENT_SIZE} bytes")
 
     path = resolve_vault_path(relative_path)
     is_new = not path.exists()
@@ -107,9 +98,7 @@ def write_file_atomic(
     return is_new, len(encoded)
 
 
-def create_file_exclusive(
-    relative_path: str, content: str, create_dirs: bool = True
-) -> int:
+def create_file_exclusive(relative_path: str, content: str, create_dirs: bool = True) -> int:
     """Create a new file with O_CREAT|O_EXCL; never overwrite an existing path.
 
     Returns bytes_written. Raises FileExistsError if the path already exists
@@ -117,9 +106,7 @@ def create_file_exclusive(
     """
     encoded = content.encode("utf-8")
     if len(encoded) > config.MAX_CONTENT_SIZE:
-        raise ValueError(
-            f"Content size {len(encoded)} bytes exceeds limit of {config.MAX_CONTENT_SIZE} bytes"
-        )
+        raise ValueError(f"Content size {len(encoded)} bytes exceeds limit of {config.MAX_CONTENT_SIZE} bytes")
 
     path = resolve_vault_path(relative_path)
 
@@ -172,13 +159,12 @@ def append_file(
     """
     encoded = content.encode("utf-8")
     if len(encoded) > config.MAX_CONTENT_SIZE:
-        raise ValueError(
-            f"Content size {len(encoded)} bytes exceeds limit of {config.MAX_CONTENT_SIZE} bytes"
-        )
+        raise ValueError(f"Content size {len(encoded)} bytes exceeds limit of {config.MAX_CONTENT_SIZE} bytes")
 
     path = resolve_vault_path(relative_path)
 
-    flags = os.O_WRONLY | os.O_APPEND
+    # O_RDWR: pod blokadą czytamy ostatni bajt (pread); O_APPEND bez O_TRUNC zostaje.
+    flags = os.O_RDWR | os.O_APPEND
     if hasattr(os, "O_NOFOLLOW"):
         flags |= os.O_NOFOLLOW
 
@@ -191,9 +177,7 @@ def append_file(
         except OSError as exc:
             if exc.errno != errno.ENOENT:
                 if exc.errno == errno.ELOOP:
-                    raise FileExistsError(
-                        f"Path already exists: {relative_path}"
-                    ) from exc
+                    raise FileExistsError(f"Path already exists: {relative_path}") from exc
                 raise
             if not create_if_missing:
                 raise FileNotFoundError(f"Not a file: {relative_path}") from exc
@@ -204,9 +188,7 @@ def append_file(
                 fd = os.open(path, create_flags, 0o644)
             except OSError as create_exc:
                 if create_exc.errno == errno.ELOOP:
-                    raise FileExistsError(
-                        f"Path already exists: {relative_path}"
-                    ) from create_exc
+                    raise FileExistsError(f"Path already exists: {relative_path}") from create_exc
                 raise
             # O_CREAT bez O_TRUNC: przy wyścigu z create zachowujemy istniejące bajty.
             created = True
@@ -222,16 +204,24 @@ def append_file(
         existing_size = os.fstat(fd).st_size
         if created and existing_size > 0:
             created = False
-        total = existing_size + len(encoded)
+        sep = b""
+        if existing_size > 0 and encoded and not encoded.startswith(b"\n") and not encoded.startswith(b"\r\n"):
+            last = os.pread(fd, 1, existing_size - 1)
+            if last != b"\n":
+                sep = b"\n"
+        to_write = sep + encoded
+        total = existing_size + len(to_write)
         if total > config.MAX_CONTENT_SIZE:
-            raise ValueError(
-                f"Content size {total} bytes exceeds limit of {config.MAX_CONTENT_SIZE} bytes"
-            )
+            raise ValueError(f"Content size {total} bytes exceeds limit of {config.MAX_CONTENT_SIZE} bytes")
 
-        written = os.write(fd, encoded)
-        if written != len(encoded):
-            raise OSError(f"Short append write: {written} of {len(encoded)} bytes")
-        os.fsync(fd)
+        # Pusta treść (i brak separatora): nie ruszaj pliku.
+        if not to_write:
+            written = 0
+        else:
+            written = os.write(fd, to_write)
+            if written != len(to_write):
+                raise OSError(f"Short append write: {written} of {len(to_write)} bytes")
+            os.fsync(fd)
     finally:
         if locked and fd is not None:
             try:

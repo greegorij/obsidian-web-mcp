@@ -274,11 +274,7 @@ class VaultBatchFrontmatterUpdateInput(BaseModel):
     def validate_updates(cls, v: list[dict]) -> list[dict]:
         for i, item in enumerate(v):
             if "path" not in item or not isinstance(item["path"], str):
-                raise ValueError(
-                    f"updates[{i}] must contain a 'path' key with a string value"
-                )
+                raise ValueError(f"updates[{i}] must contain a 'path' key with a string value")
             if "fields" not in item or not isinstance(item["fields"], dict):
-                raise ValueError(
-                    f"updates[{i}] must contain a 'fields' key with a dict value"
-                )
+                raise ValueError(f"updates[{i}] must contain a 'fields' key with a dict value")
         return v
